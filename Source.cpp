@@ -21,10 +21,12 @@ private:
 
     bool wasAboveThreshold;
     bool wasBelowThreshold;
+    bool wasFarAboveThreshold;
 
 public:
-    AlarmSystem(double ua, double rmv, int rdv) : UA(ua), RMV(rmv), RDV(rdv), isActive(false),
-        currentY(0.0), valueProcessed(true), wasAboveThreshold(false), wasBelowThreshold(false)
+    AlarmSystem(double ua, double rmv, int rdv) : UA(ua), RMV(rmv), RDV(rdv), isActive(false), currentY(0.0), 
+        valueProcessed(true), wasAboveThreshold(false), wasBelowThreshold(false), wasFarAboveThreshold(false)
+
     {
         auto now = steady_clock::now();
         aboveThresholdStartTime = now;
@@ -73,6 +75,16 @@ private:
     void processCurrentValue() {
         auto now = steady_clock::now();
 
+        if (currentY > (UA + RMV)) {
+            if (!wasFarAboveThreshold) {
+                wasFarAboveThreshold = true;
+                belowThresholdStartTime = now;
+            }
+        }
+        else {
+            wasFarAboveThreshold = false;
+        }
+
         if (currentY >= UA) {
             if (!wasAboveThreshold) {
                 aboveThresholdStartTime = now;
@@ -120,6 +132,15 @@ private:
                     isActive = false;
                     cout << "Переход в пассивное состояние по таймеру. Признак: 0" << endl;
                     wasAboveThreshold = false;
+                }
+            }
+            else if (wasFarAboveThreshold && currentY < UA) {
+                auto duration = duration_cast<seconds>(now - belowThresholdStartTime).count();
+                if (duration >= RDV) {
+                    isActive = false;
+                    cout << "Переход в пассивное состояние (превышение > RMV). Признак: 0" << endl;
+                    wasAboveThreshold = false;
+                    wasFarAboveThreshold = false;
                 }
             }
         }
