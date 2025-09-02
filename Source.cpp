@@ -15,6 +15,7 @@ private:
 
     steady_clock::time_point aboveThresholdStartTime;
     steady_clock::time_point belowThresholdStartTime;
+    steady_clock::time_point specialCaseStartTime;
 
     double currentY;
     bool valueProcessed;
@@ -22,15 +23,18 @@ private:
     bool wasAboveThreshold;
     bool wasBelowThreshold;
     bool wasFarAboveThreshold;
+    bool specialCaseTimerStarted;
+   
 
 public:
-    AlarmSystem(double ua, double rmv, int rdv) : UA(ua), RMV(rmv), RDV(rdv), isActive(false), currentY(0.0), 
-        valueProcessed(true), wasAboveThreshold(false), wasBelowThreshold(false), wasFarAboveThreshold(false)
-
+    AlarmSystem(double ua, double rmv, int rdv) : UA(ua), RMV(rmv), RDV(rdv), isActive(false),
+        currentY(0.0), valueProcessed(true), wasAboveThreshold(false),
+        wasBelowThreshold(false), wasFarAboveThreshold(false), specialCaseTimerStarted(false)
     {
         auto now = steady_clock::now();
         aboveThresholdStartTime = now;
         belowThresholdStartTime = now;
+        specialCaseStartTime = now;  
     }
 
     void processValue(double y) {
@@ -78,24 +82,23 @@ private:
         if (currentY > (UA + RMV)) {
             if (!wasFarAboveThreshold) {
                 wasFarAboveThreshold = true;
-                belowThresholdStartTime = now;
+            }
+        }
+
+        if (wasFarAboveThreshold && currentY < UA) {
+            if (!specialCaseTimerStarted) {
+                specialCaseStartTime = now;
+                specialCaseTimerStarted = true;
             }
         }
         else {
-            wasFarAboveThreshold = false;
+            specialCaseTimerStarted = false;
         }
 
         if (currentY >= UA) {
             if (!wasAboveThreshold) {
                 aboveThresholdStartTime = now;
                 wasAboveThreshold = true;
-            }
-
-            auto duration = duration_cast<seconds>(now - aboveThresholdStartTime).count();
-            if (duration >= RDV && !isActive) {
-                isActive = true;
-                cout << "Переход в активное состояние. Признак: 1" << endl;
-                wasBelowThreshold = false;
             }
         }
         else {
@@ -106,13 +109,6 @@ private:
             if (!wasBelowThreshold) {
                 belowThresholdStartTime = now;
                 wasBelowThreshold = true;
-            }
-
-            auto duration = duration_cast<seconds>(now - belowThresholdStartTime).count();
-            if (duration >= RDV && isActive) {
-                isActive = false;
-                cout << "Переход в пассивное состояние. Признак: 0" << endl;
-                wasAboveThreshold = false;
             }
         }
         else {
@@ -130,17 +126,16 @@ private:
                 auto duration = duration_cast<seconds>(now - belowThresholdStartTime).count();
                 if (duration >= RDV) {
                     isActive = false;
-                    cout << "Переход в пассивное состояние по таймеру. Признак: 0" << endl;
-                    wasAboveThreshold = false;
+                    cout << "Переход в пассивное состояние. Признак: 0" << endl;
                 }
             }
-            else if (wasFarAboveThreshold && currentY < UA) {
-                auto duration = duration_cast<seconds>(now - belowThresholdStartTime).count();
+            else if (wasFarAboveThreshold && currentY < UA && specialCaseTimerStarted) {
+                auto duration = duration_cast<seconds>(now - specialCaseStartTime).count();
                 if (duration >= RDV) {
                     isActive = false;
                     cout << "Переход в пассивное состояние (превышение > RMV). Признак: 0" << endl;
-                    wasAboveThreshold = false;
                     wasFarAboveThreshold = false;
+                    specialCaseTimerStarted = false;
                 }
             }
         }
@@ -149,8 +144,7 @@ private:
                 auto duration = duration_cast<seconds>(now - aboveThresholdStartTime).count();
                 if (duration >= RDV) {
                     isActive = true;
-                    cout << "Переход в активное состояние по таймеру. Признак: 1" << endl;
-                    wasBelowThreshold = false;
+                    cout << "Переход в активное состояние. Признак: 1" << endl;
                 }
             }
         }
